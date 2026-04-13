@@ -10,7 +10,7 @@ import { User, Lock, Shield, Eye, EyeOff, Save, CheckCircle } from 'lucide-react
 import type { Profile } from '@/types/database'
 
 export default function SettingsPage() {
-  const supabase = createClient()
+  const supabase = createClient() // still needed for password change
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
@@ -25,17 +25,16 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const load = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-      const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).single() as { data: Profile | null }
-      if (data) {
+      const res = await fetch('/api/profile')
+      if (res.ok) {
+        const data: Profile = await res.json()
         setProfile(data)
         setFullName(data.full_name || '')
       }
       setLoading(false)
     }
     load()
-  }, [supabase])
+  }, [])
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault()
