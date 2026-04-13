@@ -49,7 +49,7 @@ export default function LoginPage() {
           .from('profiles')
           .select('is_active')
           .eq('id', data.session.user.id)
-          .single()
+          .single() as { data: { is_active: boolean } | null }
 
         if (profile && !profile.is_active) {
           await supabase.auth.signOut()
