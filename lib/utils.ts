@@ -82,7 +82,12 @@ export const EXPENSE_CATEGORIES = [
   'Shopping',
   'Rent',
   'Others',
+  'Savings',
+  'Cash on Hand',
+  'Emergency Fund',
 ] as const
+
+export const FUND_CATEGORIES = ['Savings', 'Cash on Hand', 'Emergency Fund'] as const
 
 export const PAYMENT_METHODS = [
   'Cash',
@@ -100,6 +105,9 @@ export const EXPENSE_CATEGORY_COLORS: Record<string, string> = {
   Shopping: '#ec4899',
   Rent: '#14b8a6',
   Others: '#6b7280',
+  Savings: '#22c55e',
+  'Cash on Hand': '#eab308',
+  'Emergency Fund': '#a855f7',
 }
 
 export const ASSET_CATEGORY_COLORS: Record<string, string> = {

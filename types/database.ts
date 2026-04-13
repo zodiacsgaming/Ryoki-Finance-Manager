@@ -152,7 +152,7 @@ export type Database = {
           user_id: string
           title: string
           amount: number
-          category: 'Food' | 'Transportation' | 'Bills' | 'Shopping' | 'Rent' | 'Others'
+          category: 'Food' | 'Transportation' | 'Bills' | 'Shopping' | 'Rent' | 'Others' | 'Savings' | 'Cash on Hand' | 'Emergency Fund'
           date: string
           payment_method: 'Cash' | 'Credit Card' | 'Debit Card' | 'Bank Transfer' | 'E-Wallet' | 'Other'
           notes: string | null
@@ -164,7 +164,7 @@ export type Database = {
           user_id: string
           title: string
           amount: number
-          category: 'Food' | 'Transportation' | 'Bills' | 'Shopping' | 'Rent' | 'Others'
+          category: 'Food' | 'Transportation' | 'Bills' | 'Shopping' | 'Rent' | 'Others' | 'Savings' | 'Cash on Hand' | 'Emergency Fund'
           date?: string
           payment_method?: 'Cash' | 'Credit Card' | 'Debit Card' | 'Bank Transfer' | 'E-Wallet' | 'Other'
           notes?: string | null
@@ -176,7 +176,7 @@ export type Database = {
           user_id?: string
           title?: string
           amount?: number
-          category?: 'Food' | 'Transportation' | 'Bills' | 'Shopping' | 'Rent' | 'Others'
+          category?: 'Food' | 'Transportation' | 'Bills' | 'Shopping' | 'Rent' | 'Others' | 'Savings' | 'Cash on Hand' | 'Emergency Fund'
           date?: string
           payment_method?: 'Cash' | 'Credit Card' | 'Debit Card' | 'Bank Transfer' | 'E-Wallet' | 'Other'
           notes?: string | null

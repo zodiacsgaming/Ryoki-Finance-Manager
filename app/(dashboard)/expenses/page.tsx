@@ -8,11 +8,13 @@ import EmptyState from '@/components/ui/EmptyState'
 import SearchInput from '@/components/ui/SearchInput'
 import StatCard from '@/components/ui/StatCard'
 import { PageLoader } from '@/components/ui/LoadingSpinner'
-import { formatCurrency, formatDate, EXPENSE_CATEGORIES, PAYMENT_METHODS, EXPENSE_CATEGORY_COLORS, exportToCSV } from '@/lib/utils'
+import { formatCurrency, formatDate, EXPENSE_CATEGORIES, PAYMENT_METHODS, EXPENSE_CATEGORY_COLORS, FUND_CATEGORIES, exportToCSV } from '@/lib/utils'
 import toast from 'react-hot-toast'
-import { Plus, Pencil, Trash2, CreditCard, Filter, Download, Calendar } from 'lucide-react'
-import type { Expense, ExpenseCategory, PaymentMethod } from '@/types/database'
+import { Plus, Pencil, Trash2, CreditCard, Filter, Download, Calendar, Banknote, PiggyBank, Shield } from 'lucide-react'
+import type { Expense, ExpenseCategory, PaymentMethod, Saving, EmergencyFund } from '@/types/database'
 import { startOfMonth, endOfMonth, format, subMonths } from 'date-fns'
+
+type FundedBy = 'none' | 'cash_on_hand' | 'savings' | 'emergency_fund'
 
 const emptyForm = {
   title: '',
@@ -23,8 +25,15 @@ const emptyForm = {
   notes: '',
 }
 
+const emptyFunding = {
+  funded_by: 'none' as FundedBy,
+  funded_by_id: '',
+}
+
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([])
+  const [savings, setSavings] = useState<Saving[]>([])
+  const [emergencyFunds, setEmergencyFunds] = useState<EmergencyFund[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -38,20 +47,32 @@ export default function ExpensesPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [form, setForm] = useState(emptyForm)
+  const [funding, setFunding] = useState(emptyFunding)
 
-  useEffect(() => { fetchExpenses() }, [])
+  useEffect(() => { fetchAll() }, [])
 
-  const fetchExpenses = async () => {
+  const fetchAll = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/data/expenses')
-      if (res.ok) setExpenses(await res.json())
+      const [expRes, savRes, efRes] = await Promise.all([
+        fetch('/api/data/expenses'),
+        fetch('/api/data/savings'),
+        fetch('/api/data/emergency-funds'),
+      ])
+      if (expRes.ok) setExpenses(await expRes.json())
+      if (savRes.ok) setSavings(await savRes.json())
+      if (efRes.ok) setEmergencyFunds(await efRes.json())
     } finally {
       setLoading(false)
     }
   }
 
-  const openAdd = () => { setEditingId(null); setForm(emptyForm); setModalOpen(true) }
+  const openAdd = () => {
+    setEditingId(null)
+    setForm(emptyForm)
+    setFunding(emptyFunding)
+    setModalOpen(true)
+  }
 
   const openEdit = (exp: Expense) => {
     setEditingId(exp.id)
@@ -63,6 +84,7 @@ export default function ExpensesPage() {
       payment_method: exp.payment_method,
       notes: exp.notes || '',
     })
+    setFunding(emptyFunding)
     setModalOpen(true)
   }
 
@@ -73,6 +95,28 @@ export default function ExpensesPage() {
     const amount = parseFloat(form.amount)
     if (!form.title) { toast.error('Title is required'); return }
     if (isNaN(amount) || amount <= 0) { toast.error('Enter a valid amount'); return }
+
+    // Validate funding source selection
+    if (!editingId && funding.funded_by === 'savings' && !funding.funded_by_id) {
+      toast.error('Please select a savings goal to deduct from'); return
+    }
+    if (!editingId && funding.funded_by === 'emergency_fund' && !funding.funded_by_id) {
+      toast.error('Please select an emergency fund to deduct from'); return
+    }
+
+    // Check sufficient balance for savings/emergency fund
+    if (!editingId && funding.funded_by === 'savings' && funding.funded_by_id) {
+      const goal = savings.find(s => s.id === funding.funded_by_id)
+      if (goal && goal.current_amount < amount) {
+        toast.error(`Insufficient balance in "${goal.title}" (available: ${formatCurrency(goal.current_amount)})`); return
+      }
+    }
+    if (!editingId && funding.funded_by === 'emergency_fund' && funding.funded_by_id) {
+      const fund = emergencyFunds.find(f => f.id === funding.funded_by_id)
+      if (fund && fund.current_amount < amount) {
+        toast.error(`Insufficient balance in "${fund.name}" (available: ${formatCurrency(fund.current_amount)})`); return
+      }
+    }
 
     setSaving(true)
     try {
@@ -89,13 +133,47 @@ export default function ExpensesPage() {
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
+
+      // Deduct from funding source (only on create)
+      if (!editingId && funding.funded_by !== 'none') {
+        await deductFromSource(amount, form.title.trim(), form.date)
+      }
+
       toast.success(editingId ? 'Expense updated' : 'Expense added')
       setModalOpen(false)
-      fetchExpenses()
+      fetchAll()
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Failed to save')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const deductFromSource = async (amount: number, description: string, date: string) => {
+    if (funding.funded_by === 'cash_on_hand') {
+      await fetch('/api/data/cash-on-hand', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: `Expense: ${description}`, amount, type: 'out', date }),
+      })
+    } else if (funding.funded_by === 'savings' && funding.funded_by_id) {
+      const goal = savings.find(s => s.id === funding.funded_by_id)
+      if (goal) {
+        await fetch(`/api/data/savings/${funding.funded_by_id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ current_amount: goal.current_amount - amount }),
+        })
+      }
+    } else if (funding.funded_by === 'emergency_fund' && funding.funded_by_id) {
+      const fund = emergencyFunds.find(f => f.id === funding.funded_by_id)
+      if (fund) {
+        await fetch(`/api/data/emergency-funds/${funding.funded_by_id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ current_amount: fund.current_amount - amount }),
+        })
+      }
     }
   }
 
@@ -107,7 +185,7 @@ export default function ExpensesPage() {
       if (!res.ok) { const d = await res.json(); throw new Error(d.error) }
       toast.success('Expense deleted')
       setDeleteDialog(false)
-      fetchExpenses()
+      fetchAll()
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Failed to delete')
     } finally {
@@ -154,6 +232,24 @@ export default function ExpensesPage() {
     exportToCSV(data, `expenses-${format(new Date(), 'yyyy-MM-dd')}`)
     toast.success('Exported to CSV')
   }
+
+  const handleCategoryChange = (category: ExpenseCategory) => {
+    setForm(f => ({ ...f, category }))
+    if (editingId) return
+    if (category === 'Cash on Hand') {
+      setFunding({ funded_by: 'cash_on_hand', funded_by_id: '' })
+    } else if (category === 'Savings') {
+      setFunding({ funded_by: 'savings', funded_by_id: '' })
+    } else if (category === 'Emergency Fund') {
+      setFunding({ funded_by: 'emergency_fund', funded_by_id: '' })
+    } else {
+      setFunding(f => (FUND_CATEGORIES.includes(form.category as typeof FUND_CATEGORIES[number]) ? { funded_by: 'none', funded_by_id: '' } : f))
+    }
+  }
+
+  // Selected source info for balance display
+  const selectedSaving = savings.find(s => s.id === funding.funded_by_id)
+  const selectedFund = emergencyFunds.find(f => f.id === funding.funded_by_id)
 
   if (loading) return <DashboardLayout title="Expenses"><PageLoader /></DashboardLayout>
 
@@ -281,8 +377,13 @@ export default function ExpensesPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Category *</label>
-              <select className="input-base" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value as ExpenseCategory }))}>
-                {EXPENSE_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+              <select className="input-base" value={form.category} onChange={e => handleCategoryChange(e.target.value as ExpenseCategory)}>
+                <optgroup label="Expenses">
+                  {EXPENSE_CATEGORIES.filter(c => !FUND_CATEGORIES.includes(c as typeof FUND_CATEGORIES[number])).map(c => <option key={c}>{c}</option>)}
+                </optgroup>
+                <optgroup label="Deduct from Funds">
+                  {FUND_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                </optgroup>
               </select>
             </div>
           </div>
@@ -298,6 +399,89 @@ export default function ExpensesPage() {
               </select>
             </div>
           </div>
+
+          {/* Funded By — only show on create */}
+          {!editingId && (
+            <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3">
+              {FUND_CATEGORIES.includes(form.category as typeof FUND_CATEGORIES[number]) ? (
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Deduct from <span className="text-blue-600 dark:text-blue-400">{form.category}</span>
+                  <span className="text-gray-400 font-normal ml-1">(auto-selected from category)</span>
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Deduct from Source <span className="text-gray-400 font-normal">(optional)</span></p>
+                  {/* Source type buttons */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => setFunding({ funded_by: 'none', funded_by_id: '' })}
+                      className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-medium transition-all ${funding.funded_by === 'none' ? 'border-gray-500 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200' : 'border-gray-200 dark:border-gray-600 text-gray-400 hover:border-gray-300'}`}>
+                      None
+                    </button>
+                    <button type="button" onClick={() => setFunding({ funded_by: 'cash_on_hand', funded_by_id: '' })}
+                      className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-medium transition-all ${funding.funded_by === 'cash_on_hand' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400' : 'border-gray-200 dark:border-gray-600 text-gray-400 hover:border-gray-300'}`}>
+                      <Banknote className="w-3.5 h-3.5" /> Cash on Hand
+                    </button>
+                    <button type="button" onClick={() => setFunding({ funded_by: 'savings', funded_by_id: '' })}
+                      className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-medium transition-all ${funding.funded_by === 'savings' ? 'border-green-500 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400' : 'border-gray-200 dark:border-gray-600 text-gray-400 hover:border-gray-300'}`}>
+                      <PiggyBank className="w-3.5 h-3.5" /> Savings Goal
+                    </button>
+                    <button type="button" onClick={() => setFunding({ funded_by: 'emergency_fund', funded_by_id: '' })}
+                      className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-medium transition-all ${funding.funded_by === 'emergency_fund' ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400' : 'border-gray-200 dark:border-gray-600 text-gray-400 hover:border-gray-300'}`}>
+                      <Shield className="w-3.5 h-3.5" /> Emergency Fund
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* Cash on Hand balance */}
+              {funding.funded_by === 'cash_on_hand' && (
+                <p className="text-xs text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg px-3 py-2">
+                  This will add a Cash Out entry to your Cash on Hand.
+                </p>
+              )}
+
+              {/* Savings goal picker */}
+              {funding.funded_by === 'savings' && (
+                <div>
+                  <select className="input-base text-sm" value={funding.funded_by_id}
+                    onChange={e => setFunding(f => ({ ...f, funded_by_id: e.target.value }))}>
+                    <option value="">— Select a savings goal —</option>
+                    {savings.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.title} (available: {formatCurrency(s.current_amount)})
+                      </option>
+                    ))}
+                  </select>
+                  {selectedSaving && (
+                    <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                      Balance after: {formatCurrency(Math.max(0, selectedSaving.current_amount - parseFloat(form.amount || '0')))}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Emergency fund picker */}
+              {funding.funded_by === 'emergency_fund' && (
+                <div>
+                  <select className="input-base text-sm" value={funding.funded_by_id}
+                    onChange={e => setFunding(f => ({ ...f, funded_by_id: e.target.value }))}>
+                    <option value="">— Select an emergency fund —</option>
+                    {emergencyFunds.map(f => (
+                      <option key={f.id} value={f.id}>
+                        {f.name} (available: {formatCurrency(f.current_amount)})
+                      </option>
+                    ))}
+                  </select>
+                  {selectedFund && (
+                    <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                      Balance after: {formatCurrency(Math.max(0, selectedFund.current_amount - parseFloat(form.amount || '0')))}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Notes</label>
             <textarea className="input-base resize-none" rows={3} value={form.notes}

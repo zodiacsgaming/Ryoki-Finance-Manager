@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS public.expenses (
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   title TEXT NOT NULL,
   amount NUMERIC(15,2) NOT NULL DEFAULT 0,
-  category TEXT NOT NULL CHECK (category IN ('Food', 'Transportation', 'Bills', 'Shopping', 'Rent', 'Others')),
+  category TEXT NOT NULL CHECK (category IN ('Food', 'Transportation', 'Bills', 'Shopping', 'Rent', 'Others', 'Savings', 'Cash on Hand', 'Emergency Fund')),
   date DATE NOT NULL DEFAULT CURRENT_DATE,
   payment_method TEXT NOT NULL DEFAULT 'Cash' CHECK (payment_method IN ('Cash', 'Credit Card', 'Debit Card', 'Bank Transfer', 'E-Wallet', 'Other')),
   notes TEXT,
