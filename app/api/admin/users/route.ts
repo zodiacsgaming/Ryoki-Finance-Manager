@@ -14,7 +14,7 @@ async function verifySuperAdmin() {
     .from('profiles')
     .select('role')
     .eq('id', session.user.id)
-    .single()
+    .single() as { data: { role: string } | null }
 
   if (profile?.role !== 'super_admin') return null
   return session
@@ -25,7 +25,8 @@ export async function GET() {
   const session = await verifySuperAdmin()
   if (!session) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const admin = createAdminClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
   const { data: profiles, error } = await admin
     .from('profiles')
     .select('*')
@@ -50,7 +51,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 })
   }
 
-  const admin = createAdminClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
 
   // Create the auth user
   const { data: newUser, error: authError } = await admin.auth.admin.createUser({

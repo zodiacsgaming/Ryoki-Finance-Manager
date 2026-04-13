@@ -4,7 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 // Check if setup is needed (no super_admin exists)
 export async function GET() {
   try {
-    const admin = createAdminClient()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const admin = createAdminClient() as any
     const { data, error } = await admin
       .from('profiles')
       .select('id')
@@ -25,7 +26,8 @@ export async function GET() {
 // Create the first super admin
 export async function POST(req: NextRequest) {
   try {
-    const admin = createAdminClient()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const admin = createAdminClient() as any
 
     // Block if super admin already exists
     const { data: existing } = await admin
@@ -49,7 +51,7 @@ export async function POST(req: NextRequest) {
 
     // Check if auth user already exists
     const { data: { users } } = await admin.auth.admin.listUsers()
-    const existingUser = users.find(u => u.email === email)
+    const existingUser = users.find((u: { email: string }) => u.email === email)
 
     let userId: string
 
@@ -76,7 +78,11 @@ export async function POST(req: NextRequest) {
       userId = newUser.user.id
 
       // Update profile role (trigger creates it as 'user' by default)
-      await admin.from('profiles').update({ role: 'super_admin', is_active: true, full_name: full_name || email.split('@')[0] }).eq('id', userId)
+      await admin.from('profiles').update({
+        role: 'super_admin',
+        is_active: true,
+        full_name: full_name || email.split('@')[0],
+      }).eq('id', userId)
     }
 
     return NextResponse.json({ success: true })

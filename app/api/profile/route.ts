@@ -13,7 +13,8 @@ export async function PATCH(req: NextRequest) {
   }
 
   const { full_name } = await req.json()
-  const admin = createAdminClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
 
   const { error } = await admin
     .from('profiles')

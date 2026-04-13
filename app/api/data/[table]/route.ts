@@ -35,7 +35,8 @@ export async function GET(_req: NextRequest, { params }: { params: { table: stri
   const tableName = TABLE_MAP[params.table]
   if (!tableName) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const admin = createAdminClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
   const { data, error } = await admin
     .from(tableName)
     .select('*')
@@ -54,7 +55,8 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
   if (!tableName) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const body = await req.json()
-  const admin = createAdminClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
   const { data, error } = await admin
     .from(tableName)
     .insert({ ...body, user_id: session.user.id })

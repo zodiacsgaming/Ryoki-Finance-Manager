@@ -20,10 +20,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const body = await req.json()
   const { full_name, role, is_active, password } = body
-  const admin = createAdminClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
 
   // Update profile fields
-  const profileUpdate: Partial<{ full_name: string; role: string; is_active: boolean }> = {}
+  const profileUpdate: Record<string, unknown> = {}
   if (full_name !== undefined) profileUpdate.full_name = full_name
   if (role !== undefined) profileUpdate.role = role
   if (is_active !== undefined) profileUpdate.is_active = is_active
@@ -53,7 +54,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     return NextResponse.json({ error: 'You cannot delete your own account' }, { status: 400 })
   }
 
-  const admin = createAdminClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
   const { error } = await admin.auth.admin.deleteUser(params.id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

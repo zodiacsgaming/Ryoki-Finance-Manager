@@ -28,7 +28,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { table: str
   if (!tableName) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const body = await req.json()
-  const admin = createAdminClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
   const { error } = await admin
     .from(tableName)
     .update(body)
@@ -46,7 +47,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: { table: s
   const tableName = TABLE_MAP[params.table]
   if (!tableName) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const admin = createAdminClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const admin = createAdminClient() as any
   const { error } = await admin
     .from(tableName)
     .delete()
