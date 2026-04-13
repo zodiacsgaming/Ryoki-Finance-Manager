@@ -14,8 +14,8 @@ import toast from 'react-hot-toast'
 import { Plus, Pencil, Trash2, Users, Shield, Eye, EyeOff, ToggleLeft, ToggleRight, KeyRound } from 'lucide-react'
 import type { Profile } from '@/types/database'
 
-const emptyCreateForm = { email: '', password: '', full_name: '', role: 'user' as 'super_admin' | 'user' }
-const emptyEditForm = { full_name: '', role: 'user' as 'super_admin' | 'user', is_active: true }
+const emptyCreateForm = { email: '', password: '', full_name: '', super_admin: false }
+const emptyEditForm = { full_name: '', super_admin: false, is_active: true }
 
 export default function UserManagementPage() {
   const router = useRouter()
@@ -47,8 +47,8 @@ export default function UserManagementPage() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
 
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single() as { data: { role: string } | null }
-    if (profile?.role !== 'super_admin') { router.push('/dashboard'); toast.error('Access denied'); return }
+    const { data: profile } = await supabase.from('profiles').select('super_admin').eq('id', session.user.id).single() as { data: { super_admin: boolean } | null }
+    if (!profile?.super_admin) { router.push('/dashboard'); toast.error('Access denied'); return }
 
     setCurrentUserId(session.user.id)
     fetchUsers()
@@ -174,7 +174,7 @@ export default function UserManagementPage() {
 
   const openEdit = (user: Profile) => {
     setSelectedUser(user)
-    setEditForm({ full_name: user.full_name || '', role: user.role, is_active: user.is_active })
+    setEditForm({ full_name: user.full_name || '', super_admin: user.super_admin, is_active: user.is_active })
     setEditModal(true)
   }
 
@@ -203,7 +203,7 @@ export default function UserManagementPage() {
           {[
             { label: 'Total Users', value: users.length, color: 'text-blue-600' },
             { label: 'Active', value: users.filter(u => u.is_active).length, color: 'text-green-600' },
-            { label: 'Admins', value: users.filter(u => u.role === 'super_admin').length, color: 'text-purple-600' },
+            { label: 'Admins', value: users.filter(u => u.super_admin).length, color: 'text-purple-600' },
           ].map(s => (
             <div key={s.label} className="card p-4 text-center">
               <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
@@ -250,7 +250,7 @@ export default function UserManagementPage() {
                         </div>
                       </td>
                       <td className="px-5 py-4">
-                        {user.role === 'super_admin' ? (
+                        {user.super_admin ? (
                           <span className="badge bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">
                             <Shield className="w-3 h-3" /> Super Admin
                           </span>
@@ -325,13 +325,13 @@ export default function UserManagementPage() {
               </button>
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Role</label>
-            <select className="input-base" value={createForm.role}
-              onChange={e => setCreateForm(f => ({ ...f, role: e.target.value as 'super_admin' | 'user' }))}>
-              <option value="user">User</option>
-              <option value="super_admin">Super Admin</option>
-            </select>
+          <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-slate-700/50 rounded-lg">
+            <input type="checkbox" id="create_super_admin" checked={createForm.super_admin}
+              onChange={e => setCreateForm(f => ({ ...f, super_admin: e.target.checked }))}
+              className="w-4 h-4 rounded text-blue-600" />
+            <label htmlFor="create_super_admin" className="text-sm text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+              <Shield className="w-3.5 h-3.5 text-purple-500" /> Super Admin
+            </label>
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setCreateModal(false)} className="btn-secondary flex-1">Cancel</button>
@@ -348,14 +348,14 @@ export default function UserManagementPage() {
             <input className="input-base" value={editForm.full_name}
               onChange={e => setEditForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Full name" />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Role</label>
-            <select className="input-base" value={editForm.role}
-              onChange={e => setEditForm(f => ({ ...f, role: e.target.value as 'super_admin' | 'user' }))}
-              disabled={selectedUser?.id === currentUserId}>
-              <option value="user">User</option>
-              <option value="super_admin">Super Admin</option>
-            </select>
+          <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-slate-700/50 rounded-lg">
+            <input type="checkbox" id="edit_super_admin" checked={editForm.super_admin}
+              onChange={e => setEditForm(f => ({ ...f, super_admin: e.target.checked }))}
+              disabled={selectedUser?.id === currentUserId}
+              className="w-4 h-4 rounded text-blue-600" />
+            <label htmlFor="edit_super_admin" className="text-sm text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+              <Shield className="w-3.5 h-3.5 text-purple-500" /> Super Admin
+            </label>
           </div>
           <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-slate-700/50 rounded-lg">
             <input type="checkbox" id="is_active" checked={editForm.is_active}

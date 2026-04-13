@@ -8,8 +8,8 @@ async function verifySuperAdmin() {
   const supabase = createServerComponentClient<Database>({ cookies })
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) return null
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single() as { data: { role: string } | null }
-  if (profile?.role !== 'super_admin') return null
+  const { data: profile } = await supabase.from('profiles').select('super_admin').eq('id', session.user.id).single() as { data: { super_admin: boolean } | null }
+  if (!profile?.super_admin) return null
   return session
 }
 
@@ -19,14 +19,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!session) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
-  const { full_name, role, is_active, password } = body
+  const { full_name, super_admin, is_active, password } = body
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = createAdminClient() as any
 
   // Update profile fields
   const profileUpdate: Record<string, unknown> = {}
   if (full_name !== undefined) profileUpdate.full_name = full_name
-  if (role !== undefined) profileUpdate.role = role
+  if (super_admin !== undefined) profileUpdate.super_admin = super_admin
   if (is_active !== undefined) profileUpdate.is_active = is_active
 
   if (Object.keys(profileUpdate).length > 0) {

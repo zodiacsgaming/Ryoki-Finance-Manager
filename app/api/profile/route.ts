@@ -34,7 +34,7 @@ export async function GET() {
         id: session.user.id,
         email: session.user.email,
         full_name: session.user.user_metadata?.full_name ?? null,
-        role: 'user',
+        super_admin: Boolean(session.user.user_metadata?.super_admin),
         is_active: true,
       })
       .select()

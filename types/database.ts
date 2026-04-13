@@ -15,7 +15,7 @@ export type Database = {
           email: string
           full_name: string | null
           avatar_url: string | null
-          role: 'super_admin' | 'user'
+          super_admin: boolean
           is_active: boolean
           created_at: string
           updated_at: string
@@ -25,7 +25,7 @@ export type Database = {
           email: string
           full_name?: string | null
           avatar_url?: string | null
-          role?: 'super_admin' | 'user'
+          super_admin?: boolean
           is_active?: boolean
           created_at?: string
           updated_at?: string
@@ -35,7 +35,7 @@ export type Database = {
           email?: string
           full_name?: string | null
           avatar_url?: string | null
-          role?: 'super_admin' | 'user'
+          super_admin?: boolean
           is_active?: boolean
           created_at?: string
           updated_at?: string
@@ -234,4 +234,3 @@ export type CashTransaction = Database['public']['Tables']['cash_on_hand']['Row'
 export type AssetCategory = Asset['category']
 export type ExpenseCategory = Expense['category']
 export type PaymentMethod = Expense['payment_method']
-export type UserRole = Profile['role']

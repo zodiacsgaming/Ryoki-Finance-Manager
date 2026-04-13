@@ -10,7 +10,7 @@
 -- 2. Promote that user to super admin
 -- Replace the email below with your real email before running.
 UPDATE public.profiles
-SET role = 'super_admin', is_active = true
+SET super_admin = true, is_active = true
 WHERE email = 'your@email.com';
 
 -- 3. Optional: starter sample data for that same user

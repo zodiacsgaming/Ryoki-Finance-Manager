@@ -9,7 +9,7 @@ export async function GET() {
     const { data, error } = await admin
       .from('profiles')
       .select('id')
-      .eq('role', 'super_admin')
+      .eq('super_admin', true)
       .limit(1)
 
     if (error) {
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const { data: existing } = await admin
       .from('profiles')
       .select('id')
-      .eq('role', 'super_admin')
+      .eq('super_admin', true)
       .limit(1)
 
     if (existing && existing.length > 0) {
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
         id: userId,
         email,
         full_name: full_name || email.split('@')[0],
-        role: 'super_admin',
+        super_admin: true,
         is_active: true,
       })
       if (upsertError) throw upsertError
@@ -72,14 +72,14 @@ export async function POST(req: NextRequest) {
         email,
         password,
         email_confirm: true,
-        user_metadata: { full_name: full_name || email.split('@')[0], role: 'super_admin' },
+        user_metadata: { full_name: full_name || email.split('@')[0], super_admin: true },
       })
       if (createError) throw createError
       userId = newUser.user.id
 
-      // Update profile role (trigger creates it as 'user' by default)
+      // Update profile flags after the auth trigger creates a default profile row.
       await admin.from('profiles').update({
-        role: 'super_admin',
+        super_admin: true,
         is_active: true,
         full_name: full_name || email.split('@')[0],
       }).eq('id', userId)

@@ -117,7 +117,7 @@ Only a `super_admin` can create users.
 
 1. Log in as admin.
 2. Open `User Management`.
-3. Create the user with email, password, name, and role.
+3. Create the user with email, password, name, and `super_admin` access if needed.
 
 ## Project Structure
 
@@ -139,7 +139,7 @@ FINANCE TRACKER/
 
 ## Database Tables
 
-- `profiles`: role, name, email, active status
+- `profiles`: `super_admin`, name, email, active status
 - `assets`: asset tracking
 - `savings`: savings goals
 - `emergency_funds`: emergency fund tracking
@@ -150,4 +150,3 @@ FINANCE TRACKER/
 - Public sign-up is intentionally disabled.
 - The service role key is server-only. Never expose it in client code.
 - `supabase/schema.sql` is now safer to re-run during setup.
-

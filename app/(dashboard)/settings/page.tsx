@@ -110,7 +110,7 @@ export default function SettingsPage() {
               <p className="font-semibold text-gray-900 dark:text-white">{profile?.full_name || 'No name set'}</p>
               <p className="text-sm text-gray-400">{profile?.email}</p>
               <div className="flex items-center gap-2 mt-1">
-                {profile?.role === 'super_admin' ? (
+                {profile?.super_admin ? (
                   <span className="badge bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 flex items-center gap-1">
                     <Shield className="w-3 h-3" /> Super Admin
                   </span>

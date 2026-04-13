@@ -77,7 +77,7 @@ export default function Sidebar({ profile, onClose, onSignOut }: SidebarProps) {
             </p>
             <p className="text-xs text-slate-400 truncate">{profile?.email}</p>
           </div>
-          {profile?.role === 'super_admin' && (
+          {profile?.super_admin && (
             <span className="ml-auto shrink-0 text-xs bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded-full">
               Admin
             </span>
@@ -111,7 +111,7 @@ export default function Sidebar({ profile, onClose, onSignOut }: SidebarProps) {
           )
         })}
 
-        {profile?.role === 'super_admin' && (
+        {profile?.super_admin && (
           <>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 mb-2 mt-5">
               Administration

@@ -12,11 +12,11 @@ async function verifySuperAdmin() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role')
+    .select('super_admin')
     .eq('id', session.user.id)
-    .single() as { data: { role: string } | null }
+    .single() as { data: { super_admin: boolean } | null }
 
-  if (profile?.role !== 'super_admin') return null
+  if (!profile?.super_admin) return null
   return session
 }
 
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
-  const { email, password, full_name, role = 'user' } = body
+  const { email, password, full_name, super_admin = false } = body
 
   if (!email || !password) {
     return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
@@ -59,16 +59,14 @@ export async function POST(req: NextRequest) {
     email,
     password,
     email_confirm: true,
-    user_metadata: { full_name, role },
+    user_metadata: { full_name },
   })
 
   if (authError) return NextResponse.json({ error: authError.message }, { status: 500 })
 
-  // Update profile role if not default user
-  if (role !== 'user' && newUser.user) {
-    await admin.from('profiles').update({ role, full_name }).eq('id', newUser.user.id)
-  } else if (full_name && newUser.user) {
-    await admin.from('profiles').update({ full_name }).eq('id', newUser.user.id)
+  // Update profile with name and admin flag
+  if (newUser.user) {
+    await admin.from('profiles').update({ full_name: full_name || null, super_admin }).eq('id', newUser.user.id)
   }
 
   return NextResponse.json({ success: true, userId: newUser.user?.id })

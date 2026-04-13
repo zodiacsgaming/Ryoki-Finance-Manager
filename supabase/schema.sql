@@ -31,18 +31,35 @@ END $$;
 
 -- ============================================================
 -- PROFILES TABLE
--- Extends Supabase auth.users with role and status
+-- Extends Supabase auth.users with admin flag and status
 -- ============================================================
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   email TEXT NOT NULL,
   full_name TEXT,
   avatar_url TEXT,
-  role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('super_admin', 'user')),
+  super_admin BOOLEAN NOT NULL DEFAULT false,
   is_active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS super_admin BOOLEAN NOT NULL DEFAULT false;
+
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'profiles'
+      AND column_name = 'role'
+  ) THEN
+    UPDATE public.profiles
+    SET super_admin = true
+    WHERE role = 'super_admin';
+  END IF;
+END $$;
 
 -- ============================================================
 -- ASSETS TABLE
@@ -162,12 +179,12 @@ CREATE TRIGGER set_updated_at_cash_on_hand
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, email, full_name, role)
+  INSERT INTO public.profiles (id, email, full_name, super_admin)
   VALUES (
     NEW.id,
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)),
-    COALESCE(NEW.raw_user_meta_data->>'role', 'user')
+    COALESCE((NEW.raw_user_meta_data->>'super_admin')::boolean, false)
   );
   RETURN NEW;
 END;
@@ -199,11 +216,11 @@ CREATE POLICY "Users can view own profile"
   ON public.profiles FOR SELECT
   USING (auth.uid() = id);
 
--- Users can update their own profile (except role)
+-- Users can update their own profile
 CREATE POLICY "Users can update own profile"
   ON public.profiles FOR UPDATE
   USING (auth.uid() = id)
-  WITH CHECK (auth.uid() = id AND role = (SELECT role FROM public.profiles WHERE id = auth.uid()));
+  WITH CHECK (auth.uid() = id);
 
 -- Super admin can view all profiles
 CREATE POLICY "Super admin can view all profiles"
@@ -211,7 +228,7 @@ CREATE POLICY "Super admin can view all profiles"
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
-      WHERE id = auth.uid() AND role = 'super_admin'
+      WHERE id = auth.uid() AND super_admin = true
     )
   );
 
@@ -221,7 +238,7 @@ CREATE POLICY "Super admin can update all profiles"
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
-      WHERE id = auth.uid() AND role = 'super_admin'
+      WHERE id = auth.uid() AND super_admin = true
     )
   );
 
@@ -231,7 +248,7 @@ CREATE POLICY "Super admin can delete profiles"
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
-      WHERE id = auth.uid() AND role = 'super_admin'
+      WHERE id = auth.uid() AND super_admin = true
     )
   );
 
@@ -249,7 +266,7 @@ CREATE POLICY "Super admin can view all assets"
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
-      WHERE id = auth.uid() AND role = 'super_admin'
+      WHERE id = auth.uid() AND super_admin = true
     )
   );
 
@@ -267,7 +284,7 @@ CREATE POLICY "Super admin can view all savings"
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
-      WHERE id = auth.uid() AND role = 'super_admin'
+      WHERE id = auth.uid() AND super_admin = true
     )
   );
 
@@ -285,7 +302,7 @@ CREATE POLICY "Super admin can view all emergency funds"
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
-      WHERE id = auth.uid() AND role = 'super_admin'
+      WHERE id = auth.uid() AND super_admin = true
     )
   );
 
@@ -303,7 +320,7 @@ CREATE POLICY "Super admin can view all expenses"
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
-      WHERE id = auth.uid() AND role = 'super_admin'
+      WHERE id = auth.uid() AND super_admin = true
     )
   );
 
@@ -323,7 +340,7 @@ CREATE POLICY "Super admin can view all cash on hand"
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
-      WHERE id = auth.uid() AND role = 'super_admin'
+      WHERE id = auth.uid() AND super_admin = true
     )
   );
 
@@ -356,6 +373,6 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.cash_on_hand TO authenticated;
 -- the Supabase Dashboard > Authentication > Users > Add User
 -- Then run this UPDATE to make them super admin:
 --
--- UPDATE public.profiles SET role = 'super_admin' WHERE email = 'your@email.com';
+-- UPDATE public.profiles SET super_admin = true WHERE email = 'your@email.com';
 --
 -- ============================================================

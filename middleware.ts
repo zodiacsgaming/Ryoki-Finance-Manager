@@ -33,9 +33,9 @@ export async function middleware(req: NextRequest) {
   // Check if user account is active
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, is_active')
+    .select('super_admin, is_active')
     .eq('id', session.user.id)
-    .single() as { data: { role: string; is_active: boolean } | null }
+    .single() as { data: { super_admin: boolean; is_active: boolean } | null }
 
   if (profile && !profile.is_active) {
     await supabase.auth.signOut()
@@ -46,7 +46,7 @@ export async function middleware(req: NextRequest) {
 
   // Admin route protection
   if (ADMIN_ROUTES.some(r => pathname.startsWith(r))) {
-    if (profile?.role !== 'super_admin') {
+    if (!profile?.super_admin) {
       return NextResponse.redirect(new URL('/dashboard', req.url))
     }
   }
