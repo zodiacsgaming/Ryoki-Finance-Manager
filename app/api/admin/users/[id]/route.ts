@@ -8,7 +8,7 @@ async function verifySuperAdmin() {
   const supabase = createServerComponentClient<Database>({ cookies })
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) return null
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single()
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single() as { data: { role: string } | null }
   if (profile?.role !== 'super_admin') return null
   return session
 }

@@ -47,7 +47,7 @@ export default function UserManagementPage() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
 
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single()
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single() as { data: { role: string } | null }
     if (profile?.role !== 'super_admin') { router.push('/dashboard'); toast.error('Access denied'); return }
 
     setCurrentUserId(session.user.id)

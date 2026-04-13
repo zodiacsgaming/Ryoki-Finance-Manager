@@ -27,7 +27,7 @@ export default function SettingsPage() {
     const load = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
-      const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).single()
+      const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).single() as { data: Profile | null }
       if (data) {
         setProfile(data)
         setFullName(data.full_name || '')
