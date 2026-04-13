@@ -37,13 +37,13 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
         return
       }
 
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .single()
+      const response = await fetch('/api/profile')
+      if (!response.ok) {
+        return
+      }
 
-      if (data) setProfile(data)
+      const data: Profile = await response.json()
+      setProfile(data)
     }
 
     fetchProfile()
