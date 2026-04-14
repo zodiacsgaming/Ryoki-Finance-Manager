@@ -11,7 +11,7 @@ import StatCard from '@/components/ui/StatCard'
 import { PageLoader } from '@/components/ui/LoadingSpinner'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import toast from 'react-hot-toast'
-import { Plus, Pencil, Trash2, PiggyBank, Target, CheckCircle2, PlusCircle } from 'lucide-react'
+import { Plus, Pencil, Trash2, PiggyBank, Target, CheckCircle2, PlusCircle, ArrowLeftRight } from 'lucide-react'
 import type { Saving } from '@/types/database'
 
 const emptyForm = {
@@ -43,6 +43,10 @@ export default function SavingsPage() {
   const [depositingItem, setDepositingItem] = useState<Saving | null>(null)
   const [form, setForm] = useState(emptyForm)
   const [depositForm, setDepositForm] = useState(emptyDeposit)
+  const [transferModal, setTransferModal] = useState(false)
+  const [transferringItem, setTransferringItem] = useState<Saving | null>(null)
+  const [transferring, setTransferring] = useState(false)
+  const [transferForm, setTransferForm] = useState({ amount: '', date: new Date().toISOString().split('T')[0] })
 
   useEffect(() => { fetchSavings() }, [])
 
@@ -141,6 +145,52 @@ export default function SavingsPage() {
     }
   }
 
+  const openTransfer = (s: Saving) => {
+    setTransferringItem(s)
+    setTransferForm({ amount: '', date: new Date().toISOString().split('T')[0] })
+    setTransferModal(true)
+  }
+
+  const handleTransfer = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!transferringItem) return
+    const amount = parseFloat(transferForm.amount)
+    if (isNaN(amount) || amount <= 0) { toast.error('Enter a valid amount'); return }
+    if (amount > transferringItem.current_amount) { toast.error('Amount exceeds available savings balance'); return }
+
+    setTransferring(true)
+    try {
+      const newAmount = transferringItem.current_amount - amount
+      const [savRes, cashRes] = await Promise.all([
+        fetch(`/api/data/savings/${transferringItem.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ current_amount: newAmount }),
+        }),
+        fetch('/api/data/cash-on-hand', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            description: `Transfer from savings: ${transferringItem.title}`,
+            amount,
+            type: 'in',
+            date: transferForm.date,
+            notes: null,
+          }),
+        }),
+      ])
+      if (!savRes.ok) { const d = await savRes.json(); throw new Error(d.error) }
+      if (!cashRes.ok) { const d = await cashRes.json(); throw new Error(d.error) }
+      toast.success(`Transferred ${formatCurrency(amount)} to Cash on Hand`)
+      setTransferModal(false)
+      fetchSavings()
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Transfer failed')
+    } finally {
+      setTransferring(false)
+    }
+  }
+
   const filtered = useMemo(() => savings.filter(s => s.title.toLowerCase().includes(search.toLowerCase())), [savings, search])
 
   const totalSaved = savings.reduce((s, a) => s + a.current_amount, 0)
@@ -196,6 +246,7 @@ export default function SavingsPage() {
                     <div className="flex gap-1 shrink-0">
                       {done && <span className="badge bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">Done</span>}
                       <button onClick={() => openDeposit(s)} title="Add Money" className="p-1.5 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/30 text-gray-400 hover:text-green-600 transition-colors"><PlusCircle className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => openTransfer(s)} title="Transfer to Cash on Hand" className="p-1.5 rounded-lg hover:bg-orange-50 dark:hover:bg-orange-900/30 text-gray-400 hover:text-orange-600 transition-colors"><ArrowLeftRight className="w-3.5 h-3.5" /></button>
                       <button onClick={() => openEdit(s)} className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 text-gray-400 hover:text-blue-600 transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
                       <button onClick={() => openDelete(s.id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-600 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
@@ -253,6 +304,43 @@ export default function SavingsPage() {
 
       <ConfirmDialog isOpen={deleteDialog} onClose={() => setDeleteDialog(false)} onConfirm={handleDelete}
         title="Delete Savings Goal" message="Are you sure you want to delete this savings goal?" loading={deleting} />
+
+      <Modal isOpen={transferModal} onClose={() => setTransferModal(false)} title="Transfer to Cash on Hand">
+        {transferringItem && (
+          <form onSubmit={handleTransfer} className="space-y-4">
+            <div className="bg-gray-50 dark:bg-slate-700/50 rounded-xl p-4">
+              <p className="text-xs text-gray-400 mb-1">From Savings Goal</p>
+              <p className="font-semibold text-gray-900 dark:text-white">{transferringItem.title}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Available: <span className="font-medium text-green-600 dark:text-green-400">{formatCurrency(transferringItem.current_amount)}</span>
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Amount to Transfer (₱) *</label>
+              <input className="input-base" type="number" min="0.01" step="0.01" max={transferringItem.current_amount}
+                value={transferForm.amount} onChange={e => setTransferForm(f => ({ ...f, amount: e.target.value }))}
+                placeholder="0.00" required autoFocus />
+              {transferForm.amount && !isNaN(parseFloat(transferForm.amount)) && parseFloat(transferForm.amount) > 0 && (
+                <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                  Savings remaining: {formatCurrency(transferringItem.current_amount - parseFloat(transferForm.amount))}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Date *</label>
+              <input className="input-base" type="date" value={transferForm.date}
+                onChange={e => setTransferForm(f => ({ ...f, date: e.target.value }))} required />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => setTransferModal(false)} className="btn-secondary flex-1">Cancel</button>
+              <button type="submit" className="btn-primary flex-1" disabled={transferring}>
+                <ArrowLeftRight className="w-4 h-4" />
+                {transferring ? 'Transferring...' : 'Transfer to Cash'}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
 
       <Modal isOpen={depositModal} onClose={() => setDepositModal(false)} title="Add Money">
         {depositingItem && (

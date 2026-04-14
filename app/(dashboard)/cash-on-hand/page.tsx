@@ -10,8 +10,8 @@ import StatCard from '@/components/ui/StatCard'
 import { PageLoader } from '@/components/ui/LoadingSpinner'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import toast from 'react-hot-toast'
-import { Plus, Pencil, Trash2, Banknote, ArrowDownLeft, ArrowUpRight, TrendingUp, TrendingDown } from 'lucide-react'
-import type { CashTransaction } from '@/types/database'
+import { Plus, Pencil, Trash2, Banknote, ArrowDownLeft, ArrowUpRight, TrendingUp, TrendingDown, ArrowLeftRight } from 'lucide-react'
+import type { CashTransaction, Saving, EmergencyFund } from '@/types/database'
 
 const emptyForm = {
   description: '',
@@ -23,28 +23,46 @@ const emptyForm = {
 
 export default function CashOnHandPage() {
   const [transactions, setTransactions] = useState<CashTransaction[]>([])
+  const [savings, setSavings] = useState<Saving[]>([])
+  const [emergencyFunds, setEmergencyFunds] = useState<EmergencyFund[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [transferring, setTransferring] = useState(false)
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [deleteDialog, setDeleteDialog] = useState(false)
+  const [transferModal, setTransferModal] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [form, setForm] = useState(emptyForm)
+  const [transferForm, setTransferForm] = useState({
+    fundType: 'savings' as 'savings' | 'emergency',
+    fundId: '',
+    amount: '',
+    date: new Date().toISOString().split('T')[0],
+  })
 
-  useEffect(() => { fetchTransactions() }, [])
+  useEffect(() => { fetchAll() }, [])
 
-  const fetchTransactions = async () => {
+  const fetchAll = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/data/cash-on-hand')
-      if (res.ok) setTransactions(await res.json())
+      const [txRes, savRes, efRes] = await Promise.all([
+        fetch('/api/data/cash-on-hand'),
+        fetch('/api/data/savings'),
+        fetch('/api/data/emergency-funds'),
+      ])
+      if (txRes.ok) setTransactions(await txRes.json())
+      if (savRes.ok) setSavings(await savRes.json())
+      if (efRes.ok) setEmergencyFunds(await efRes.json())
     } finally {
       setLoading(false)
     }
   }
+
+  const fetchTransactions = fetchAll
 
   const openAdd = (defaultType?: 'in' | 'out') => {
     setEditingId(null)
@@ -112,6 +130,67 @@ export default function CashOnHandPage() {
     }
   }
 
+  const openTransfer = () => {
+    const defaultFundId = savings[0]?.id ?? emergencyFunds[0]?.id ?? ''
+    const defaultFundType = savings.length > 0 ? 'savings' : 'emergency'
+    setTransferForm({
+      fundType: defaultFundType as 'savings' | 'emergency',
+      fundId: defaultFundId,
+      amount: '',
+      date: new Date().toISOString().split('T')[0],
+    })
+    setTransferModal(true)
+  }
+
+  const handleTransfer = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const amount = parseFloat(transferForm.amount)
+    if (isNaN(amount) || amount <= 0) { toast.error('Enter a valid amount'); return }
+    if (amount > balance) { toast.error('Amount exceeds current cash on hand balance'); return }
+    if (!transferForm.fundId) { toast.error('Please select a fund'); return }
+
+    const isSavings = transferForm.fundType === 'savings'
+    const selectedFund = isSavings
+      ? savings.find(s => s.id === transferForm.fundId)
+      : emergencyFunds.find(f => f.id === transferForm.fundId)
+    if (!selectedFund) { toast.error('Selected fund not found'); return }
+
+    const fundName = isSavings ? (selectedFund as Saving).title : (selectedFund as EmergencyFund).name
+    const newFundAmount = selectedFund.current_amount + amount
+    const fundUrl = isSavings ? `/api/data/savings/${transferForm.fundId}` : `/api/data/emergency-funds/${transferForm.fundId}`
+
+    setTransferring(true)
+    try {
+      const [cashRes, fundRes] = await Promise.all([
+        fetch('/api/data/cash-on-hand', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            description: `Transfer to ${isSavings ? 'savings' : 'emergency fund'}: ${fundName}`,
+            amount,
+            type: 'out',
+            date: transferForm.date,
+            notes: null,
+          }),
+        }),
+        fetch(fundUrl, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ current_amount: newFundAmount }),
+        }),
+      ])
+      if (!cashRes.ok) { const d = await cashRes.json(); throw new Error(d.error) }
+      if (!fundRes.ok) { const d = await fundRes.json(); throw new Error(d.error) }
+      toast.success(`Transferred ${formatCurrency(amount)} to ${fundName}`)
+      setTransferModal(false)
+      fetchAll()
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Transfer failed')
+    } finally {
+      setTransferring(false)
+    }
+  }
+
   const filtered = useMemo(() => transactions.filter(t => {
     const matchSearch = t.description.toLowerCase().includes(search.toLowerCase())
     const matchType = filterType ? t.type === filterType : true
@@ -135,6 +214,9 @@ export default function CashOnHandPage() {
           <div className="flex gap-2">
             <button onClick={() => openAdd('out')} className="btn-secondary">
               <ArrowUpRight className="w-4 h-4 text-red-500" /> Cash Out
+            </button>
+            <button onClick={openTransfer} className="btn-secondary" disabled={savings.length === 0 && emergencyFunds.length === 0}>
+              <ArrowLeftRight className="w-4 h-4 text-orange-500" /> Transfer to Fund
             </button>
             <button onClick={() => openAdd('in')} className="btn-primary">
               <ArrowDownLeft className="w-4 h-4" /> Cash In
@@ -355,6 +437,116 @@ export default function CashOnHandPage() {
         message="Are you sure you want to delete this transaction?"
         loading={deleting}
       />
+
+      <Modal isOpen={transferModal} onClose={() => setTransferModal(false)} title="Transfer Cash to Fund">
+        <form onSubmit={handleTransfer} className="space-y-4">
+          <div className="bg-gray-50 dark:bg-slate-700/50 rounded-xl p-4">
+            <p className="text-xs text-gray-400 mb-1">Current Cash Balance</p>
+            <p className={`text-lg font-bold ${balance >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+              {formatCurrency(balance)}
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Fund Type *</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setTransferForm(f => ({ ...f, fundType: 'savings', fundId: savings[0]?.id ?? '' }))}
+                className={`py-2.5 rounded-xl border-2 text-sm font-medium transition-all ${
+                  transferForm.fundType === 'savings'
+                    ? 'border-green-500 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
+                    : 'border-gray-200 dark:border-gray-600 text-gray-500 hover:border-gray-300'
+                }`}
+              >
+                Savings Goal
+              </button>
+              <button
+                type="button"
+                onClick={() => setTransferForm(f => ({ ...f, fundType: 'emergency', fundId: emergencyFunds[0]?.id ?? '' }))}
+                className={`py-2.5 rounded-xl border-2 text-sm font-medium transition-all ${
+                  transferForm.fundType === 'emergency'
+                    ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400'
+                    : 'border-gray-200 dark:border-gray-600 text-gray-500 hover:border-gray-300'
+                }`}
+              >
+                Emergency Fund
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              {transferForm.fundType === 'savings' ? 'Savings Goal' : 'Emergency Fund'} *
+            </label>
+            {transferForm.fundType === 'savings' ? (
+              savings.length === 0 ? (
+                <p className="text-sm text-gray-400 italic">No savings goals found</p>
+              ) : (
+                <select
+                  className="input-base"
+                  value={transferForm.fundId}
+                  onChange={e => setTransferForm(f => ({ ...f, fundId: e.target.value }))}
+                  required
+                >
+                  {savings.map(s => (
+                    <option key={s.id} value={s.id}>{s.title} — {formatCurrency(s.current_amount)}</option>
+                  ))}
+                </select>
+              )
+            ) : (
+              emergencyFunds.length === 0 ? (
+                <p className="text-sm text-gray-400 italic">No emergency funds found</p>
+              ) : (
+                <select
+                  className="input-base"
+                  value={transferForm.fundId}
+                  onChange={e => setTransferForm(f => ({ ...f, fundId: e.target.value }))}
+                  required
+                >
+                  {emergencyFunds.map(f => (
+                    <option key={f.id} value={f.id}>{f.name} — {formatCurrency(f.current_amount)}</option>
+                  ))}
+                </select>
+              )
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Amount to Transfer (₱) *</label>
+            <input
+              className="input-base"
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={transferForm.amount}
+              onChange={e => setTransferForm(f => ({ ...f, amount: e.target.value }))}
+              placeholder="0.00"
+              required
+              autoFocus
+            />
+            {transferForm.amount && !isNaN(parseFloat(transferForm.amount)) && parseFloat(transferForm.amount) > 0 && (
+              <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                Cash remaining: {formatCurrency(balance - parseFloat(transferForm.amount))}
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Date *</label>
+            <input
+              className="input-base"
+              type="date"
+              value={transferForm.date}
+              onChange={e => setTransferForm(f => ({ ...f, date: e.target.value }))}
+              required
+            />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={() => setTransferModal(false)} className="btn-secondary flex-1">Cancel</button>
+            <button type="submit" className="btn-primary flex-1" disabled={transferring}>
+              <ArrowLeftRight className="w-4 h-4" />
+              {transferring ? 'Transferring...' : 'Transfer to Fund'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </DashboardLayout>
   )
 }
