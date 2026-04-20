@@ -11,7 +11,7 @@ import { PageLoader } from '@/components/ui/LoadingSpinner'
 import { formatCurrency, formatDate, EXPENSE_CATEGORIES, PAYMENT_METHODS, EXPENSE_CATEGORY_COLORS, FUND_CATEGORIES, exportToCSV } from '@/lib/utils'
 import toast from 'react-hot-toast'
 import { Plus, Pencil, Trash2, CreditCard, Filter, Download, Calendar, Banknote, PiggyBank, Shield } from 'lucide-react'
-import type { Expense, ExpenseCategory, PaymentMethod, Saving, EmergencyFund } from '@/types/database'
+import type { Expense, ExpenseCategory, PaymentMethod, Saving, EmergencyFund, CashTransaction } from '@/types/database'
 import { startOfMonth, endOfMonth, format, subMonths } from 'date-fns'
 
 type FundedBy = 'none' | 'cash_on_hand' | 'savings' | 'emergency_fund'
@@ -34,6 +34,7 @@ export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [savings, setSavings] = useState<Saving[]>([])
   const [emergencyFunds, setEmergencyFunds] = useState<EmergencyFund[]>([])
+  const [cashTransactions, setCashTransactions] = useState<CashTransaction[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -54,14 +55,16 @@ export default function ExpensesPage() {
   const fetchAll = async () => {
     setLoading(true)
     try {
-      const [expRes, savRes, efRes] = await Promise.all([
+      const [expRes, savRes, efRes, cashRes] = await Promise.all([
         fetch('/api/data/expenses'),
         fetch('/api/data/savings'),
         fetch('/api/data/emergency-funds'),
+        fetch('/api/data/cash-on-hand'),
       ])
       if (expRes.ok) setExpenses(await expRes.json())
       if (savRes.ok) setSavings(await savRes.json())
       if (efRes.ok) setEmergencyFunds(await efRes.json())
+      if (cashRes.ok) setCashTransactions(await cashRes.json())
     } finally {
       setLoading(false)
     }
@@ -104,7 +107,10 @@ export default function ExpensesPage() {
       toast.error('Please select an emergency fund to deduct from'); return
     }
 
-    // Check sufficient balance for savings/emergency fund
+    // Check sufficient balance for each funding source
+    if (!editingId && funding.funded_by === 'cash_on_hand' && amount > cashBalance) {
+      toast.error(`Insufficient cash on hand (available: ${formatCurrency(cashBalance)})`); return
+    }
     if (!editingId && funding.funded_by === 'savings' && funding.funded_by_id) {
       const goal = savings.find(s => s.id === funding.funded_by_id)
       if (goal && goal.current_amount < amount) {
@@ -251,6 +257,25 @@ export default function ExpensesPage() {
   const selectedSaving = savings.find(s => s.id === funding.funded_by_id)
   const selectedFund = emergencyFunds.find(f => f.id === funding.funded_by_id)
 
+  // Cash on hand balance
+  const cashBalance = useMemo(() => {
+    const totalIn = cashTransactions.filter(t => t.type === 'in').reduce((s, t) => s + t.amount, 0)
+    const totalOut = cashTransactions.filter(t => t.type === 'out').reduce((s, t) => s + t.amount, 0)
+    return totalIn - totalOut
+  }, [cashTransactions])
+
+  // Available balance limit for the currently selected funding source
+  const activeLimit = useMemo<number | null>(() => {
+    if (editingId) return null
+    if (funding.funded_by === 'cash_on_hand') return cashBalance
+    if (funding.funded_by === 'savings' && selectedSaving) return selectedSaving.current_amount
+    if (funding.funded_by === 'emergency_fund' && selectedFund) return selectedFund.current_amount
+    return null
+  }, [editingId, funding, cashBalance, selectedSaving, selectedFund])
+
+  const enteredAmount = parseFloat(form.amount || '0')
+  const amountExceedsLimit = activeLimit !== null && enteredAmount > activeLimit && enteredAmount > 0
+
   if (loading) return <DashboardLayout title="Expenses"><PageLoader /></DashboardLayout>
 
   return (
@@ -372,8 +397,17 @@ export default function ExpensesPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Amount (₱) *</label>
-              <input className="input-base" type="number" min="0.01" step="0.01" value={form.amount}
+              <input
+                className={`input-base ${amountExceedsLimit ? 'border-red-500 focus:ring-red-500 dark:border-red-500' : ''}`}
+                type="number" min="0.01" step="0.01" value={form.amount}
                 onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" required />
+              {activeLimit !== null && (
+                <p className={`text-xs mt-1 ${amountExceedsLimit ? 'text-red-500 dark:text-red-400 font-medium' : 'text-gray-400 dark:text-gray-500'}`}>
+                  {amountExceedsLimit
+                    ? `Exceeds available balance of ${formatCurrency(activeLimit)}`
+                    : `Available: ${formatCurrency(activeLimit)}`}
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Category *</label>
@@ -489,7 +523,7 @@ export default function ExpensesPage() {
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setModalOpen(false)} className="btn-secondary flex-1">Cancel</button>
-            <button type="submit" className="btn-primary flex-1" disabled={saving}>{saving ? 'Saving...' : editingId ? 'Update' : 'Add Expense'}</button>
+            <button type="submit" className="btn-primary flex-1" disabled={saving || amountExceedsLimit}>{saving ? 'Saving...' : editingId ? 'Update' : 'Add Expense'}</button>
           </div>
         </form>
       </Modal>
